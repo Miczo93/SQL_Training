@@ -1599,6 +1599,76 @@ Set transaction isolation level snapshot --tak samo jak read commited
 --distributed transaction / cant
 --transaction level read consistency/ tatement-level read consistency
 
+--------------------------DEADLOCK--------------------------------------
+--1 transaction locks table A, 2 transaction locks table B
+--1 transaction waits for table B, 2 transaction waits for table A
+--Lock motion thread co 5 sekund szuka deadlocku 
+--Rollback one of these as a deadlock victim
+--Which one? Least expensive to roll back, or manually or random
+--Can set up deadlock priority manually (-10,10), higher less chance
+SET DEADLOCK_PRIORITY NORMAL --0 default
+-----------Deadlock log-------------
+DBCC Traceon(1222, -1) --turn on global, -1 global, without only session
+DBCC TraceStatus(1222, -1) --check
+DBCC Traceoff(1222, -1) --turn off
+execute sp_readerrorlog --read deadlock log
+--SQL Profiler=>Template: blank, event selection: locks: deadlock graph => run
+--------catching deadlocks-------------
+Create Table TableA(
+ID int NOT NULL Primary Key,
+Name nvarchar(50) NOT NULL)
+Create Table TableB(
+ID int NOT NULL Primary Key,
+Name nvarchar(50) NOT NULL)
+
+Insert into TableA Values(1,'Mark')
+Insert into TableB Values(1,'Mary')
+
+
+create procedure spCatchDeadlocks1
+as 
+Begin 
+    Begin Tran
+    Begin Try 
+         Update TableA Set Name = 'Mark Transaction 1' where Id = 1 
+         Waitfor delay '00:00:05' 
+         Update TableB Set Name = 'Mary Transaction 1' where Id = 1 
+         Commit Transaction
+         Select 'Transaction Successful'   
+    End Try
+    Begin Catch
+         If(ERROR_NUMBER() = 1205)--deadlock
+         Begin
+             Select 'Deadlock. Transaction failed. Please retry'
+         End
+         Rollback
+    End Catch   
+End
+
+create procedure spCatchDeadlocks2 
+as 
+Begin 
+    Begin Tran
+    Begin Try
+         Update TableB Set Name = 'Mary Transaction 2' where Id = 1
+         Waitfor delay '00:00:05'
+         Update TableA Set Name = 'Mark Transaction 2' where Id = 1
+         Commit Transaction
+         Select 'Transaction Successful'   
+    End Try
+    Begin Catch
+         If(ERROR_NUMBER() = 1205)
+         Begin
+             Select 'Deadlock. Transaction failed. Please retry'
+        End
+         Rollback
+    End Catch   
+End
+
+execute spCatchDeadlocks1
+execute spCatchDeadlocks2
+
+DBCC OpenTran --wszystkie open trasaction
 
 
 --------------------------Subquery--------------------------------
