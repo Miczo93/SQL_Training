@@ -2077,3 +2077,99 @@ WHEN NOT MATCHED BY TARGET THEN
 
 select * from StudentSource
 select * from StudentTarget
+
+------------------EXCEPT---------------------------
+Insert into StudentSource values (3, 'Exclusive A')
+Insert into StudentSource values (4, 'Duplicate A')
+Insert into StudentSource values (5, 'Duplicate A')
+Insert into StudentTarget values (4, 'Exclusive B')
+Insert into StudentTarget values (5, 'Duplicate B')
+Insert into StudentTarget values (6, 'Duplicate B')
+
+select * from StudentSource
+select * from StudentTarget
+
+Select *
+From StudentSource
+Except  --te same selecty i typy danych
+Select *
+From StudentTarget
+
+--Except vs Not In--
+
+Select ID, Name
+From StudentSource
+Where Name NOT IN
+(Select Name From StudentTarget) --
+
+--except filtruje duplikaty daje tylko distinct vs nie
+--except musi miec ta samo ilosc kolumn
+
+----------------INTERSECT---------------------
+Select *
+From StudentSource
+Intersect  --common rows, te same selecty i typy danych
+Select *
+From StudentTarget
+
+--intersect vs inner join
+--filtruje duplikaty daje tylko distinct vs nie (dac select distinct, zeby by³o)
+--null to null, vs rozne
+
+Select StudentSource.ID, StudentSource.Name
+From StudentSource Inner Join StudentTarget
+On StudentSource.Name = StudentTarget.Name
+
+--------------------UNION-------------------
+
+Select *
+From StudentSource
+UNION  --suma bez duplikatow
+Select *
+From StudentTarget
+
+Select *
+From StudentSource
+UNION ALL --z duplikatami
+Select *
+From StudentTarget
+
+--------------CROSS APPLY & OUTER APPLY-------------------
+
+select * from tblDepartment
+select * from tblEmployee
+
+Select D.DeptName, E.Name, E.City, E.Salary
+from tblDepartment D
+Inner Join tblEmployee E --only matching
+On D.Id = E.DeptID
+
+Select D.DeptName, E.Name, E.City, E.Salary
+from tblDepartment D
+Left Join tblEmployee E --with nulls from first table
+On D.Id = E.DeptID
+
+Create function fn_GetEmployeesByDeptId(@DeptId int)
+Returns Table
+as
+Return
+(
+    Select Id, Name, City, Salary, DeptID
+    from tblEmployee where DeptID = @DeptId
+)
+Go
+
+Select * from fn_GetEmployeesByDeptId(1)
+
+Select D.DeptName, E.Name, E.City, E.Salary
+from tblDepartment D
+--Inner Join fn_GetEmployeesByDeptId(D.Id) E --nie mozna inner joina dla funkcji miedzy 
+--On D.Id = E.DeptID --tego nie trzeba dla cross apply
+Cross Apply fn_GetEmployeesByDeptId(D.Id) E --funkcja zostaje uzyta dla kazdego rekordu w tblDepartment
+
+Select D.DeptName, E.Name, E.City, E.Salary
+from tblDepartment D
+Outer Apply fn_GetEmployeesByDeptId(D.Id) E --z nullami
+
+--Joinowanie table z funkcjami ktore zwracaja table, cross apply - inner join, outer apply - outer join
+
