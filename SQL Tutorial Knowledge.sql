@@ -1120,6 +1120,153 @@ Begin
 End
 Delete from ViewEmployeeDept2 where ID =19 --dziala
 
+----------------DDL Data Definition Language Trigger---------------------------
+
+CREATE TRIGGER trMyFirstDDLTrigger
+ON Database --scope
+FOR CREATE_TABLE --na kazdy create table
+AS
+BEGIN
+   Print 'New table created' 
+END
+
+ALTER TRIGGER trMyFirstDDLTrigger
+ON Database
+FOR CREATE_TABLE, ALTER_TABLE, DROP_TABLE
+AS
+BEGIN
+   Print 'A table has just been created, modified or deleted'
+END
+
+ALTER TRIGGER trMyFirstDDLTrigger
+ON Database
+FOR CREATE_TABLE, ALTER_TABLE, DROP_TABLE
+AS
+BEGIN
+   Rollback --prevent
+   Print 'You cannot create, alter or drop a table'
+END
+
+DISABLE TRIGGER trMyFirstDDLTrigger ON DATABASE -- wylaczenie trigera
+ENABLE TRIGGER trMyFirstDDLTrigger ON DATABASE
+DROP TRIGGER trMyFirstDDLTrigger ON DATABASE
+
+CREATE TRIGGER trRenameTable
+ON DATABASE
+FOR RENAME
+AS
+BEGIN
+    Print 'You just renamed something'
+END
+
+sp_rename 'Test1', 'Test1R'
+sp_rename 'Test1R', 'Test1'
+
+sp_rename 'Test1.ID', 'NewId', 'column'
+sp_rename 'Test1.NewId', 'ID', 'column'
+-------------------server scope--------------------------
+CREATE TRIGGER tr_ServerScopeDDLTrigger
+ON ALL SERVER --server scope
+FOR CREATE_TABLE, ALTER_TABLE, DROP_TABLE
+AS
+BEGIN
+    ROLLBACK
+    Print 'You cannot create, alter or drop a table in any database on the server'
+END
+
+DISABLE TRIGGER tr_ServerScopeDDLTrigger ON ALL SERVER
+------------excecution order trigger---------------------
+CREATE TRIGGER tr_DatabaseScopeTest
+ON DATABASE
+FOR CREATE_TABLE
+AS
+BEGIN
+    Print 'Database Scope Trigger'
+END
+GO
+
+CREATE TRIGGER tr_ServerScopeTest
+ON ALL SERVER
+FOR CREATE_TABLE
+AS
+BEGIN
+    Print 'Server Scope Trigger'
+END
+GO
+
+EXEC sp_settriggerorder
+@triggername = 'tr_DatabaseScopeTest',
+@order = 'none', --First trigger ,Last trigger,none. None=random
+@stmttype = 'CREATE_TABLE', --insert,update,delete, or ddl event
+@namespace = 'DATABASE' --database,server,null
+GO
+
+
+DISABLE TRIGGER tr_DatabaseScopeTest ON DATABASE
+DISABLE TRIGGER tr_ServerScopeTest ON ALL SERVER
+
+--------------------AUDIT EVENT DATA----------------------- 
+
+Create table TableChanges
+(
+    DatabaseName nvarchar(250),
+    TableName nvarchar(250),
+    EventType nvarchar(250),
+    LoginName nvarchar(250),
+    SQLCommand nvarchar(2500),
+    AuditDateTime datetime
+)
+Go
+
+
+CREATE TRIGGER tr_AuditTableChanges
+ON ALL SERVER
+FOR CREATE_TABLE, ALTER_TABLE, DROP_TABLE
+AS
+BEGIN
+    DECLARE @EventData XML --cale info
+    SELECT @EventData = EVENTDATA()
+    INSERT INTO Testing.dbo.TableChanges --server scope wiec full name
+    (DatabaseName, TableName, EventType, LoginName,
+     SQLCommand, AuditDateTime)
+    VALUES
+    (
+         @EventData.value('(/EVENT_INSTANCE/DatabaseName)[1]', 'varchar(250)'), --[1] select top1
+         @EventData.value('(/EVENT_INSTANCE/ObjectName)[1]', 'varchar(250)'),
+         @EventData.value('(/EVENT_INSTANCE/EventType)[1]', 'nvarchar(250)'),
+         @EventData.value('(/EVENT_INSTANCE/LoginName)[1]', 'varchar(250)'),
+         @EventData.value('(/EVENT_INSTANCE/TSQLCommand)[1]', 'nvarchar(2500)'),
+         GetDate()
+    )
+END
+
+Select * from TableChanges
+
+DISABLE TRIGGER tr_AuditTableChanges ON ALL SERVER
+
+-------------------Logon Trigger--------------------------------
+
+SELECT * FROM sys.dm_exec_sessions
+
+CREATE TRIGGER tr_LogonAuditTriggers --max 3 users on db
+ON ALL SERVER
+FOR LOGON
+AS
+BEGIN
+    DECLARE @LoginName NVARCHAR(100)
+    Set @LoginName = ORIGINAL_LOGIN()
+    IF (SELECT COUNT(*) FROM sys.dm_exec_sessions
+         WHERE is_user_process = 1
+         AND original_login_name = @LoginName) > 3
+    BEGIN
+         Print '4 connection of ' + @LoginName + ' blocked'
+         ROLLBACK
+    END
+END
+
+DISABLE TRIGGER tr_LogonAuditTriggers ON ALL SERVER
+
+
 ------------------------------Common Table Expressions-------------------------
 --Show dept where Empolyee >3
 
@@ -2173,3 +2320,28 @@ Outer Apply fn_GetEmployeesByDeptId(D.Id) E --z nullami
 
 --Joinowanie table z funkcjami ktore zwracaja table, cross apply - inner join, outer apply - outer join
 
+-----------------------SELECT INTO---------------------------
+
+select * from tblDepartment
+select * from tblEmployee
+select * from EmployeesBackup
+
+SELECT * INTO EmployeesBackup FROM tblEmployee --copy
+SELECT * INTO Sample.dbo.EmployeesBackup FROM tblEmployee --full name
+SELECT Id, Name, City INTO EmployeesBackup FROM tblEmployee --only selected columns
+SELECT * INTO EmployeesBackup FROM tblEmployee WHERE DeptId = 1 --only selected record
+
+--SELECT * INTO EmployeesBackup --not everything bc the name is the same
+SELECT tblEmployee.*,tblDepartment.DeptName  INTO EmployeesBackup
+FROM tblEmployee
+INNER JOIN tblDepartment
+ON tblEmployee.DeptId = tblDepartment.ID
+
+SELECT * INTO EmployeesBackup FROM tblEmployee WHERE 1 <> 1 --only the structure
+
+--IT HAS TO BE NEW TABLE
+
+INSERT INTO EmployeesBackup 
+SELECT * FROM tblEmployee --Exisiting table
+
+Drop Table EmployeesBackup
