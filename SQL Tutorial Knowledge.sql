@@ -144,21 +144,16 @@ Group By City, GenderID
 Order By City
 
 
---before group (update also), not agrage (sum, etc)
+--where, before group (update also), not agrage (sum, etc), faster bc filter first
 Select City, GenderID,SUM(Salary) AS 'Sum of salary', COUNT(ID) AS 'Total Employees' from tblEmployee
 Where GenderID = 1
 Group By City, GenderID
 Order By City
 
---after group, only not showing (only select), accepts agrage
+--having, after group, only not showing (only select), accepts agrage, slower bc filter after
 Select City, GenderID,SUM(Salary) AS 'Sum of salary', COUNT(ID) AS 'Total Employees' from tblEmployee
 Group By City, GenderID
 Having GenderID = 1
-Order By City
-
-Select City, GenderID,SUM(Salary) AS 'Sum of salary', COUNT(ID) AS 'Total Employees' from tblEmployee
-Where SUM(Salary) > 4000
-Group By City, GenderID
 Order By City
 
 Select City, GenderID,SUM(Salary) AS 'Sum of salary', COUNT(ID) AS 'Total Employees' from tblEmployee
@@ -2345,3 +2340,225 @@ INSERT INTO EmployeesBackup
 SELECT * FROM tblEmployee --Exisiting table
 
 Drop Table EmployeesBackup
+
+
+------------------Table valued Parameter--------------------
+Create Table EmployeesSample
+(
+    Id int primary key,
+    Name nvarchar(50),
+    Gender nvarchar(10)
+)
+Go
+ 
+Create Type TableValueType as Table --Progammability-types-user-defained table types
+(
+    Id int primary key,
+    Name nvarchar(50),
+    Gender nvarchar(10)
+)
+
+
+CREATE PROCEDURE spUserDefineTableProcedure
+@TableValueType TableValueType READONLY --must be readonly
+AS
+BEGIN
+    INSERT INTO EmployeesSample
+    SELECT * FROM @TableValueType
+END
+
+DECLARE @EmployeeTableType TableValueType
+INSERT INTO @EmployeeTableType VALUES (1, 'Mark', 'Male')
+INSERT INTO @EmployeeTableType VALUES (2, 'Mary', 'Female')
+INSERT INTO @EmployeeTableType VALUES (3, 'John', 'Male')
+INSERT INTO @EmployeeTableType VALUES (4, 'Sara', 'Female')
+INSERT INTO @EmployeeTableType VALUES (5, 'Rob', 'Male')
+
+
+EXECUTE spUserDefineTableProcedure @EmployeeTableType
+
+select * from EmployeesSample
+
+-------------------GROUPING SETS------------------------
+select * from tblEmployee
+select * from tblGender
+
+
+--old method
+Select City, Gender, Sum(Salary) as TotalSalary --pokaz male/female/unknow and city
+From tblEmployee
+INNER Join tblGender
+On tblEmployee.GenderID = tblGender.ID
+Group By City, Gender
+UNION ALL
+Select City, NULL, Sum(Salary) as TotalSalary --also only city
+From tblEmployee 
+INNER Join tblGender
+On tblEmployee.GenderID = tblGender.ID
+Group By City
+UNION ALL
+Select NULL, Gender, Sum(Salary) as TotalSalary --also only male/female/unkown
+From  tblEmployee
+INNER Join tblGender
+On tblEmployee.GenderID = tblGender.ID
+Group By Gender
+UNION ALL
+Select NULL, NULL, Sum(Salary) as TotalSalary --grand total
+From tblEmployee 
+INNER Join tblGender
+On tblEmployee.GenderID = tblGender.ID
+
+--new method
+
+Select City, Gender, Sum(Salary) TotalSalary
+From tblEmployee
+Join tblGender
+On tblEmployee.GenderID = tblGender.ID
+Group BY GROUPING SETS
+(
+	(City, Gender),
+	(City),               
+	(Gender) ,
+	()
+)
+Order By Grouping(City), Grouping(Gender), Gender
+
+-------------------ROLL UP-----------------------------
+select * from tblEmployee
+
+--1 BY ROLLUP
+SELECT City, SUM(Salary) AS TotalSalary
+FROM tblEmployee
+GROUP BY ROLLUP(City)
+
+--2  WITH ROLLUP
+SELECT City, SUM(Salary) AS TotalSalary
+FROM tblEmployee
+GROUP BY City WITH ROLLUP
+
+--Old method
+SELECT City, SUM(Salary) AS TotalSalary
+FROM tblEmployee
+GROUP BY City
+UNION ALL
+SELECT NULL, SUM(Salary) AS TotalSalary
+FROM tblEmployee
+
+--Grouping set
+SELECT City, SUM(Salary) AS TotalSalary
+FROM tblEmployee
+GROUP BY GROUPING SETS
+(
+    (City),
+    ()
+)
+
+-----------------------CUBE--------------------------
+--wszystkie kombinacja grupowania
+
+--1
+SELECT City, Gender, SUM(Salary) AS TotalSalary
+FROM tblEmployee
+Join tblGender
+On tblEmployee.GenderID = tblGender.ID
+GROUP BY Cube(City, Gender)
+
+--2
+SELECT City, Gender, SUM(Salary) AS TotalSalary
+FROM tblEmployee
+Join tblGender
+On tblEmployee.GenderID = tblGender.ID
+GROUP BY City, Gender with Cube
+
+--Grouping set
+SELECT City, Gender, SUM(Salary) AS TotalSalary
+FROM tblEmployee
+Join tblGender
+On tblEmployee.GenderID = tblGender.ID
+GROUP BY
+    GROUPING SETS
+    (
+         (City, Gender),
+         (City),
+         (Gender),
+         ()
+    )
+	
+-------------------------------ROLL UP VS CUBE--------------------------
+
+Create table SalesWithCountry
+(
+    Id int primary key identity,
+    Continent nvarchar(50),
+    Country nvarchar(50),
+    City nvarchar(50),
+    SaleAmount int
+)
+
+Insert into SalesWithCountry values('Asia','India','Bangalore',1000)
+Insert into SalesWithCountry values('Asia','India','Chennai',2000)
+Insert into SalesWithCountry values('Asia','Japan','Tokyo',4000)
+Insert into SalesWithCountry values('Asia','Japan','Hiroshima',5000)
+Insert into SalesWithCountry values('Europe','United Kingdom','London',1000)
+Insert into SalesWithCountry values('Europe','United Kingdom','Manchester',2000)
+Insert into SalesWithCountry values('Europe','France','Paris',4000)
+Insert into SalesWithCountry values('Europe','France','Cannes',5000)
+
+SELECT Continent, Country, City, SUM(SaleAmount) AS TotalSales
+FROM SalesWithCountry
+GROUP BY ROLLUP(Continent, Country, City) --tylko [continent, country, city], [continent, country, [city],[]
+
+SELECT Continent, Country, City, SUM(SaleAmount) AS TotalSales
+FROM SalesWithCountry
+GROUP BY CUBE(Continent, Country, City) --wszystkie kombinacje
+
+
+---------------------GROUPING FUNCTIONS--------------------------------
+
+SELECT   Continent, Country, City, SUM(SaleAmount) AS TotalSales,
+         GROUPING(Continent) AS GP_Continent, --zwraca 1 jesli agregadowana
+         GROUPING(Country) AS GP_Country,
+         GROUPING(City) AS GP_City
+FROM SalesWithCountry
+GROUP BY ROLLUP(Continent, Country, City)
+
+--Zamien nulle na all
+SELECT  
+    CASE WHEN
+         GROUPING(Continent) = 1 THEN 'All' ELSE ISNULL(Continent, 'Unknown')
+    END AS Continent,
+    CASE WHEN
+         GROUPING(Country) = 1 THEN 'All' ELSE ISNULL(Country, 'Unknown')
+    END AS Country,
+    CASE
+         WHEN GROUPING(City) = 1 THEN 'All' ELSE ISNULL(City, 'Unknown')
+    END AS City,
+    SUM(SaleAmount) AS TotalSales
+FROM SalesWithCountry
+GROUP BY ROLLUP(Continent, Country, City)
+
+
+--2 metoda na all zamiast null
+SELECT   ISNULL(Continent, 'All') AS Continent,
+         ISNULL(Country, 'All') AS Country,
+         ISNULL(City, 'All') AS City,
+         SUM(SaleAmount) AS TotalSales
+FROM SalesWithCountry
+
+GROUP BY ROLLUP(Continent, Country, City)
+
+--------------GROUPING ID FUNCTIONS-------------
+
+SELECT   Continent, Country, City, SUM(SaleAmount) AS TotalSales,
+         CAST(GROUPING(Continent) AS NVARCHAR(1)) +
+         CAST(GROUPING(Country) AS NVARCHAR(1)) +
+         CAST(GROUPING(City) AS NVARCHAR(1)) AS Groupings, --BINARY
+         GROUPING_ID(Continent, Country, City) AS GPID --binary->decimal, daje lv grupowania
+FROM SalesWithCountry
+GROUP BY ROLLUP(Continent, Country, City)
+
+SELECT   Continent, Country, City, SUM(SaleAmount) AS TotalSales,
+         GROUPING_ID(Continent, Country, City) AS GPID
+FROM SalesWithCountry
+GROUP BY ROLLUP(Continent, Country, City)--wpierw continent, potem country, potem city
+ORDER BY GPID--od szczegó³owego do ogólnego
