@@ -2562,3 +2562,93 @@ SELECT   Continent, Country, City, SUM(SaleAmount) AS TotalSales,
 FROM SalesWithCountry
 GROUP BY ROLLUP(Continent, Country, City)--wpierw continent, potem country, potem city
 ORDER BY GPID--od szczegó³owego do ogólnego
+
+------------------------------------OVER------------------------------------
+
+SELECT Gender, COUNT(*) AS GenderTotal, AVG(Salary) AS AvgSal,
+        MIN(Salary) AS MinSal, MAX(Salary) AS MaxSal
+		-- ,Name  --cannot add name bc no in avg, min, max or in group by
+FROM tblEmployee
+Join tblGender
+On tblEmployee.GenderID = tblGender.ID
+GROUP BY Gender
+--AGREGATED DATA 
+
+SELECT Name, Salary, Gender,
+        COUNT(Gender) OVER(PARTITION BY Gender) AS GenderTotals,
+        AVG(Salary) OVER(PARTITION BY Gender) AS AvgSal,
+        MIN(Salary) OVER(PARTITION BY Gender) AS MinSal,
+        MAX(Salary) OVER(PARTITION BY Gender) AS MaxSal
+FROM tblEmployee
+Join tblGender
+On tblEmployee.GenderID = tblGender.ID
+--AGREGATED DATA AND NOT AGREGATED
+
+------------------------------ROW NUMBER FUNCTION---------------------------
+SELECT Name, Gender, Salary,
+        ROW_NUMBER() OVER (ORDER BY Gender) AS RowNumber --Female/Male liczy razem
+FROM tblEmployee
+Join tblGender
+On tblEmployee.GenderID = tblGender.ID
+
+SELECT Name, Gender, Salary,
+        ROW_NUMBER() OVER (PARTITION BY Gender ORDER BY Gender) AS RowNumber --Female/Male liczy oddzielnie
+FROM tblEmployee
+Join tblGender
+On tblEmployee.GenderID = tblGender.ID
+
+--Mozna tym usunac duplikaty, wybieramy co ma byc exclusive w rownumber partiton by
+--i dajemy delete from *** where RowNumber >1
+
+------------------------------RANK AND DENSE_RANK FUNCTION---------------------------
+
+SELECT Name, Salary, Gender,
+RANK() OVER (ORDER BY Salary DESC) AS [Rank], 
+-- rankingu dane, jak remis to daje 2 na tym samym i nastepne skipuje, dajac dziury
+DENSE_RANK() OVER (ORDER BY Salary DESC) AS DenseRank
+-- rankingu dane, jak remis to daje 2 na tym samym i nastepne NIE skipuje
+FROM tblEmployee
+Join tblGender
+On tblEmployee.GenderID = tblGender.ID
+
+--znajdz kogos na miesjcu x w rankingu z dziurami
+WITH Result AS
+(
+    SELECT Salary, RANK() OVER (ORDER BY Salary DESC) AS Salary_Rank
+	FROM tblEmployee
+	Join tblGender
+	On tblEmployee.GenderID = tblGender.ID
+)
+SELECT TOP 1 Salary FROM Result WHERE Salary_Rank = 1
+
+--znajdz kogos na miesjcu x w rankingu
+WITH Result AS
+(
+    SELECT Salary, DENSE_RANK() OVER (ORDER BY Salary DESC) AS Salary_Rank
+	FROM tblEmployee
+	Join tblGender
+	On tblEmployee.GenderID = tblGender.ID
+)
+SELECT TOP 1 Salary FROM Result WHERE Salary_Rank = 1
+
+--znajdz female na miesjcu x w rankingu
+WITH Result AS
+(
+    SELECT Salary, Gender,
+           DENSE_RANK() OVER (PARTITION BY Gender ORDER BY Salary DESC)
+           AS Salary_Rank
+	FROM tblEmployee
+	Join tblGender
+	On tblEmployee.GenderID = tblGender.ID
+)
+SELECT TOP 1 Salary FROM Result WHERE Salary_Rank = 3
+AND Gender = 'Female'
+
+--------------------------RANK, DENSE_RANK, ROW_NUMBER---------------------------
+SELECT Name, Salary, Gender,
+ROW_NUMBER() OVER (ORDER BY Salary DESC) AS RowNumber, --1,2,3,4
+RANK() OVER (ORDER BY Salary DESC) AS [Rank],		   --1,1,3,4
+DENSE_RANK() OVER (ORDER BY Salary DESC) AS DenseRank  --1,1,2,3
+FROM tblEmployee
+Join tblGender
+On tblEmployee.GenderID = tblGender.ID
