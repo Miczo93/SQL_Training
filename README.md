@@ -1,6 +1,6 @@
 # SQL_Training
 
-This projects demonstrates my abilities in SQL.
+This project demonstrates my abilities in SQL.
 
 It covers the basis from simple crud operation to the more advanced techniques like:
 - Adding constrains,
